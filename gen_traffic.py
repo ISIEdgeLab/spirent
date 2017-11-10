@@ -53,11 +53,7 @@ if __name__ == '__main__':
             try:
                 sb = sess.create_streamblock(port=ports[0])
                 sb.create_ethernetII()
-                # GTL DEBUG
-                log.debug('Streamblock FC before IPV4: {}'.format(sess.stc.get('streamblock1')['FrameConfig']))
                 sb.create_ipv4()
-                # GTL DEBUG
-                log.debug('Streamblock FC after IPV4: {}'.format(sess.stc.get('streamblock1')['FrameConfig']))
                 sb.generate_traffic(seconds=args.howlong)
             except StcStreamblockException as e:
                 log.error('Error running traffic stream: {}'.format(e))

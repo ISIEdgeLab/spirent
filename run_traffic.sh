@@ -158,7 +158,7 @@ HANDLES=" ethernet:ethernetii1 ${HANDLES}"
 # GTL prog gruide claims you can add VLAN headers, but no.
 # GTL       "The PGA package also supports the definition of VLAN sub-interfaces for Ethernet ports." page 177 programmer's guide.
 # The Prog guide claims you can add a VLAN PDU, but uses the "frame" and "frameConfig" argument to create streamblock which doesn't work 
-#        and has contradictory documentation anyway! Fuck This Shit.
+#        and has contradictory documentation anyway!
 # GTL - Paul has set the routers to put untagged vlans into vlan 2, so this may not be needed anymore.
 #curl ${CURLARGS} -X POST -H "${SESSHEAD}" -d "object_type=vlans:vlan" -d name="vlans_name" -d under=streamblock1 http://${STCSERV}/stcapi/objects
 curl ${CURLARGS} -X POST -H "${SESSHEAD}" -d "object_type=ipv4:IPv4" -d Gateway=${GW1} -d Protocol=${TRAF_IPPROTO} \
