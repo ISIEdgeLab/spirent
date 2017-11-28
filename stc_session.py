@@ -100,7 +100,7 @@ class StcSession:   # py3.x inherits from object by default
 
         chas_addr = self._config['chassis_addr']
         log.info('Connecting to chassis at {}'.format(chas_addr))
-        stc.connect(chas_addr)
+        stc.connect([chas_addr])
         log.info('Connected.')
 
         log.info('creating new project.')
