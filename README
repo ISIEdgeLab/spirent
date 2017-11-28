@@ -1,0 +1,74 @@
+Spirent HOWTO/README
+--------------------
+
+gen_traffic.py
+==============
+The main traffic generation script is gen_traffic.py. Here's the usage string:
+
+usage: gen_traffic.py [-h] [-l {all,debug,info,error,critical}] [--debugREST]
+                      [-c CONFIG] [--generate_config] [-t HOWLONG]
+
+Start traffic between two enclaves.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -l {all,debug,info,error,critical}, --loglevel {all,debug,info,error,critical}
+  --debugREST           If given, dump a lot of information about the HTTP/URL
+                        calls being made by the REST API.
+  -c CONFIG, --config CONFIG
+                        Customize the traffic via a config file.
+  --generate_config     Generate a sample config file to stdout and exit.
+  -t HOWLONG, --time-in-seconds HOWLONG
+                        How long to generate traffic for in seconds.
+
+The standard work flow for using gen_traffic is to create a default configuration file
+via the --generate_config argument, optionally edit that file, then run gen_traffic.py
+with the new configuration. 
+
+The scripts must be run in a virtual environment to function. To enter the environment, 
+source the appropriate script in /proj/edgect/share/spirent/venv/bin/activate:
+
+. /proj/edgect/share/spirent/venv/bin/activate
+
+Generate a default configuration file, edit it, and run traffic. 
+
+/proj/edgect/share/spirent/gen_traffic.py --generate_config > ~/spirent.conf
+vim ~/spirent.conf
+/proj/edgect/share/spirent/gen_traffic.py -c ~/spirent.conf
+
+By default, the script will generate UDP traffic for 10 seconds between pc8 and pc9. 
+To modify which enclaves traffic is generated between, edit the configuarion 
+ipv4->{sourceAddr, destAddr, gateway}. The items in the configuration file are 
+documented in the Spirent Test Center Programmers Guide. The configuration given to the
+script is passed directly to the Spirent REST API of the Spirent device pointed to 
+in the "stc_session" stanza in the configuration. 
+
+run_traffic.sh
+==============
+There is another barebones script which uses curl to speak directly to the REST API of
+the Sprient device to send traffic. It's called run_traffic.sh. It was written to 
+test/debug the Sprient device, but could be used to run traffic as well. There is a minial
+user interface to this script:
+
+run_traffic.sh -s source_addr -d dest_addr -p IP_protocol -l frame_len -r frames_per_second -t time_to_run
+
+source_addr can also be set via $TRAF_SRCADDR in the environment.
+dest_addr can also be set via $TRAF_DSTADDR in the environment.
+IP_protocol can also be set via $TRAF_IPPROTO in the environment.
+frame_len can also be set via $TRAF_FRAMELEN in the environment.
+frames_per_second can also be set via $TRAF_FRAMEPERSEC in the environment.
+time_to_run can also be set via $TRAF_TIME in the environment.
+
+The addresses will control which enclave the traffic comes from and goes to
+and should be 10.X.1.N for X=enclave and 2 <= N <= 255.
+The gateway for each enclave is assumed to be 10.X.1.1.
+
+Defaults are
+        source_addr: 10.8.1.25
+        dest_addr: 10.9.1.25
+        dest_addr: 10.9.1.25
+        IP protocol: 17
+        Frame Length 128
+        Frames/sec: 10
+        Traffic time: 5
+
