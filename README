@@ -63,9 +63,10 @@ run_traffic.sh
 ==============
 There is another barebones script which uses curl to speak directly to the REST API of
 the Sprient device to send traffic. It's called run_traffic.sh. It was written to 
-test/debug the Sprient device, but could be used to run traffic as well. There is a minial
+test/debug the Sprient device, but could be used to run traffic as well. There is a minimal
 user interface to this script:
 
+-----------------
 run_traffic.sh -s source_addr -d dest_addr -p IP_protocol -l frame_len -r frames_per_second -t time_to_run
 
 source_addr can also be set via $TRAF_SRCADDR in the environment.
@@ -82,9 +83,21 @@ The gateway for each enclave is assumed to be 10.X.1.1.
 Defaults are
         source_addr: 10.8.1.25
         dest_addr: 10.9.1.25
-        dest_addr: 10.9.1.25
         IP protocol: 17
         Frame Length 128
         Frames/sec: 10
         Traffic time: 5
+-----------------
 
+This script can be copied and edited in place for "advanced" traffic generation. See Spirent docs for 
+REST API details. 
+
+Troubleshooting
+===============
+The system_info.py script may give useful error messages when run. If it runs to completion,
+it will dump information about the Spirent device to stdout. 
+
+Make sure the Sprient Test Center REST API script is running on the Test Center. (Ask Geoff about
+this or login to the remote desktop and click the REST API icon "stcweb Shortcut" on the desktop.)
+
+See Geoff or Paul. 
