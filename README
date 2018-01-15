@@ -1,9 +1,25 @@
 Spirent HOWTO/README
 --------------------
 
+How to create traffic on sprient in discrete steps.
+---------------------------------------------------
+Create a session and keep track of session state:
+spirent_session.py --command create > spirent.statefile
+
+Use an existing session to generate traffic:
+# update ip addresses and traffic flows as desired.
+vim spirent.statefile
+# run traffic for 15 seconds.
+spirent_session.py --command traffic -s spirent.statefile -t 15
+# run traffic for 25 seconds
+spirent_session.py --command traffic -s spirent.statefile -t 25
+# end sesion
+spirent_session.py --command destroy -s spirent.statefile
+rm spirent.statefile
+
 gen_traffic.py
 ==============
-The main traffic generation script is gen_traffic.py. Here's the usage string:
+A standalone traffic generation script is gen_traffic.py. Here's the usage string:
 
 usage: gen_traffic.py [-h] [-l {all,debug,info,error,critical}] [--debugREST]
                       [-c CONFIG] [--generate_config] [-t HOWLONG]
