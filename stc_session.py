@@ -60,6 +60,8 @@ class StcSession:   # py3.x inherits from object by default
         self._ports = {}
         self._objects = {}   # dict of handle to data. i.e. {'streamblock1': {sb data/config}, ...}
 
+        self._keep_open = False
+
     #
     # Context manager.
     #
@@ -69,7 +71,7 @@ class StcSession:   # py3.x inherits from object by default
     # when done with traffic.
     #
     def __enter__(self):
-        self._stc = self.connect()
+        self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -85,30 +87,39 @@ class StcSession:   # py3.x inherits from object by default
         return self._project_handle
 
     #
-    # Non context manager API. Create a session, connect to the chassis. an create
+    # Non context manager API. Connect to the chassis and stc REST API. If existing = False, 
+    # create a session and project. If False, assume these already exist and do not create them.
     # a project.
     #
     def connect(self):
         addr, port = self._config['stc_server_addr'], self._config['stc_server_port']
         log.info('Connecting to: {}:{}'.format(addr, port))
-        stc = stchttp.StcHttp(addr, port=port, debug_print=self._verbose)
+        self._stc = stchttp.StcHttp(addr, port=port, debug_print=self._verbose)
 
-        log.info('Creating new session, "{}" for user {}.'.format(self._session_id, self._user))
-        self._sid = stc.new_session(self._user, self._session_id)
+        if 'spi_sid' in self._config:
+            log.info('Joining existing session {}'.format(self._config['spi_sid']))
+            self._stc.join_session(self._config['spi_sid'])
+            self._sid = self._config['spi_sid']
+        else:
+            log.info('Creating new session, "{}" for user {}.'.format(self._session_id, self._user))
+            self._sid = self._stc.new_session(self._user, self._session_id)
 
-        stc.apply()
+        self._stc.apply()
 
         chas_addr = self._config['chassis_addr']
         log.info('Connecting to chassis at {}'.format(chas_addr))
-        stc.connect(chas_addr)
+        # stc.connect wants a list of addresses for some reason.
+        self._stc.connect([chas_addr])
         log.info('Connected.')
 
-        log.info('creating new project.')
-        data = stc.createx('project')
-        log.info('created project: {}'.format(json.dumps(data, indent=4, sort_keys=True)))
-        self._project_handle = data['handle']
-
-        return stc
+        # If not configured with an existing project, create a new one.
+        if 'project_handle' not in self._config:
+            log.info('creating new project.')
+            data = self._stc.createx('project')
+            log.info('created project: {}'.format(json.dumps(data, indent=4, sort_keys=True)))
+            self._project_handle = data['handle']
+        else:
+            self._project_handle = self._config['project_handle']
 
     @property
     def stc(self):
@@ -120,6 +131,10 @@ class StcSession:   # py3.x inherits from object by default
 
     @stc_connected
     def disconnect(self):
+        if self._keep_open:
+            log.info('Keeping session open...')
+            return 
+
         if self._ports:
             ports = ' '.join(self._ports.keys())
             log.info('Detaching from ports: {}'.format(ports))
@@ -141,9 +156,9 @@ class StcSession:   # py3.x inherits from object by default
         log.info('Ending session.')
         self._stc.end_session(end_tcsession=True)
 
-    #
-    # methods
-    #
+    def keep_open(self):
+        self._keep_open = True
+
     @stc_connected
     def reserve_ports(self):
         '''Reserve the ports that map to the source and destination configurations.'''
@@ -183,11 +198,38 @@ class StcSession:   # py3.x inherits from object by default
         return StcStreamblock(handle, port, self)
 
     @stc_connected
+    def destroy_streamblock(self, sb):
+        if sb._handle in self._objects.keys():
+            log.info('Deleting object {}.'.format(sb._handle))
+            self._stc.delete(sb._handle)
+            del self._objects[sb._handle]
+
+    @stc_connected
+    def detach_ports(self):
+        if not self._ports:
+            log.info('Attempt to detech from ports when we are not attached to any. Ignoring.')
+            return
+
+        ports = ' '.join(self._ports.keys())
+        log.info('Detaching from ports: {}'.format(ports))
+        self._stc.perform('DetachPorts', portlist=ports)
+        self._ports = None
+
+    @stc_connected
     def perform(self, command, params=None, **kwargs):
         data = self._stc.perform(command, params=params, **kwargs)
         log.info('performing {}({}, {})'.format(command, params, kwargs))
         log.debug('result: {}'.format(json.dumps(data, indent=4, sort_keys=True)))
         return data
+
+    def save_and_write_session(self, filehandle):
+        '''Store session internals (if they exist) and write the current state/config to the file handle given.'''
+        self._config['verbose'] = self._verbose
+        self._config['user'] = self._user
+        self._config['spi_sid'] = self._sid
+        self._config['session_id'] = self._session_id
+        self._config['project_handle'] = self._project_handle
+        json.dump(self._stc_config.data, filehandle, indent=4, sort_keys=True)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
