@@ -67,7 +67,7 @@ class StcStreamblock:
         kwargs = self._session.config.data[StcIPv4.config_key]
         return self._session.create_obj('ipv4:IPv4', self._handle, None, **kwargs)
 
-    def generate_traffic(self, seconds=0):
+    def generate_traffic(self):
         '''
         Given this stream block, generate traffic via our session for the time given.
 
@@ -77,7 +77,13 @@ class StcStreamblock:
         StcStreamblockException raised on errors. True returned on sucess.
 
         '''
-        t = seconds if seconds else maxsize
+        # GTL - FIX THIS STUPID CLASS DESIGN that req. hardcoding these strings.
+        sess_conf_key = 'stc_session'
+        traf_time_key = 'traffic_duration'
+        if traf_time_key not in self._session.config.data[sess_conf_key]:
+            t = maxsize
+        else:
+            t = self._session.config.data[sess_conf_key][traf_time_key]
 
         # GTL is this needed?
         self._session.stc.apply()
@@ -102,7 +108,7 @@ class StcStreamblock:
         status = self._session.perform('StreamBlockStart', streamblocklist=self._handle)
 
         log.info('Sleeping {} seconds'.format(t))
-        sleep(seconds)
+        sleep(t)
 
         log.info('Stopping streamblock {}'.format(self._handle))
         status = self._session.perform('StreamBlockStop', streamblocklist=self._handle)

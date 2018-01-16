@@ -46,8 +46,6 @@ if __name__ == '__main__':
                     'the default.')
     ap.add_argument('--command', required=True, choices=['create', 'traffic', 'destroy'], dest='command', 
                     help='Command must be one of "create", "destroy", or "traffic".')
-    ap.add_argument('-t', dest='howlong', help='If command is "traffic", how long in seconds to generate '
-                    'traffic. Ignored with other commands. Default is 10.', default=10, type=int)
     args = ap.parse_args()
 
     if args.debugREST:
@@ -82,7 +80,7 @@ if __name__ == '__main__':
                         sb = session.create_streamblock(port=ports[0])
                         sb.create_ethernetII()
                         sb.create_ipv4()
-                        sb.generate_traffic(seconds=args.howlong)
+                        sb.generate_traffic()
                         session.destroy_streamblock(sb)
                         session.detach_ports()
                     except StcStreamblockException as e:

@@ -40,6 +40,7 @@ class StcSession:   # py3.x inherits from object by default
         'stc_server_port': '8888',
         'chassis_addr': '10.237.192.20',
         'slot': 5,
+        'traffic_duration': 10
     }
     config_key = 'stc_session'
 
