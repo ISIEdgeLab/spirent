@@ -40,7 +40,6 @@ class StcSession:   # py3.x inherits from object by default
         'stc_server_port': '8888',
         'chassis_addr': '10.237.192.20',
         'slot': 5,
-        'traffic_duration': 10
     }
     config_key = 'stc_session'
 
@@ -196,14 +195,24 @@ class StcSession:   # py3.x inherits from object by default
     def create_streamblock(self, port):
         kwargs = self._stc_config.data[StcStreamblock.config_key]
         handle = self.create_obj('streamBlock', port, **kwargs)
+        self._config['streamblock_handle'] = handle
+        self._config['streamblock_port'] = port
         return StcStreamblock(handle, port, self)
 
     @stc_connected
-    def destroy_streamblock(self, sb):
-        if sb._handle in self._objects.keys():
-            log.info('Deleting object {}.'.format(sb._handle))
-            self._stc.delete(sb._handle)
-            del self._objects[sb._handle]
+    def destroy_streamblock(self):
+        handle = self._config['streamblock_handle'] if 'streamblock_handle' in self._config else None
+        port = self._config['streamblock_port'] if 'streamblock_port' in self._config else None
+        if handle and port:
+            sb = StcStreamblock(handle, port, self)
+            sb.stop_traffic()
+            log.info('Deleting object {}/{}.'.format(handle, port))
+            self._stc.delete(handle)
+            if handle in self._objects:
+                del self._objects[sb._handle]
+
+            del self._config['streamblock_handle']
+            del self._config['streamblock_port']
 
     @stc_connected
     def detach_ports(self):

@@ -44,8 +44,8 @@ if __name__ == '__main__':
                     'used when modifying traffic flows. The argument can be "-". If it is, the state '
                     'will be written to stdout when creating or read from stdin when destroying. "-" is '
                     'the default.')
-    ap.add_argument('--command', required=True, choices=['create', 'traffic', 'destroy'], dest='command', 
-                    help='Command must be one of "create", "destroy", or "traffic".')
+    ap.add_argument('--command', required=True, choices=['create', 'traffic_start', 'traffic_stop', 'destroy'],
+                    dest='command', help='The command to run using the given session/state.')
     args = ap.parse_args()
 
     if args.debugREST:
@@ -71,20 +71,28 @@ if __name__ == '__main__':
         try:
             with StcSession(config=config) as session:
                 if args.command == 'create':
+                    # The "create" is done in the context manager if the session does not exist in the given state.
                     session.keep_open()
                 
-                elif args.command == 'traffic':
+                elif args.command == 'traffic_start':
                     session.keep_open()
                     ports = session.reserve_ports()
                     try:
                         sb = session.create_streamblock(port=ports[0])
                         sb.create_ethernetII()
                         sb.create_ipv4()
-                        sb.generate_traffic()
-                        session.destroy_streamblock(sb)
+                        sb.start_traffic()
+                    except StcStreamblockException as e:
+                        log.error('Error starting traffic stream: {}'.format(e))
+                        exit(1)  
+
+                elif args.command == 'traffic_stop':
+                    try:
+                        session.keep_open()
+                        session.destroy_streamblock()
                         session.detach_ports()
                     except StcStreamblockException as e:
-                        log.error('Error running traffic stream: {}'.format(e))
+                        log.error('Error stapping traffic stream: {}'.format(e))
                         exit(1)  
 
                 elif args.command == 'destroy':
@@ -96,7 +104,7 @@ if __name__ == '__main__':
                     # should not happen as argparser restricts choices
                     raise('Command {} not supported.'.format(args.command))
                    
-                if args.command in ['create', 'traffic']:
+                if args.command in ['create', 'traffic_start', 'traffic_stop']:
                     # pass the current stat forward.
                     with open_file_or_stdio(args.statefile, STDOUT) as fd:
                         session.save_and_write_session(fd)

@@ -16,8 +16,7 @@ if __name__ == '__main__':
     ap.add_argument('-s', '--srcaddr', default=None, required=True, help='Source address for traffic.', type=str)
     ap.add_argument('-d', '--dstaddr', default=None, required=True, help='Destination address for traffic.',
                     type=str)
-    ap.add_argument('-t', '--traffic_duration', default=10, help='How long in seconds to generate traffic.',
-                    type=int)
+    ap.add_argument('-t', '--traffic_duration', default=None, help='How long in seconds to generate traffic.', type=int)
     ap.add_argument('-p', '--protocol', default=17, help='IP protocol to use for traffic. Default is UDP (17).',
                     type=int)
     args = ap.parse_args()
@@ -34,7 +33,8 @@ if __name__ == '__main__':
     config[StcIPv4.config_key]['gateway'] = '.'.join(args.srcaddr.split('.')[:3]+['1'])
 
     # Session config
-    config[StcSession.config_key]['traffic_duration'] = args.traffic_duration
+    if args.traffic_duration:
+        config[StcSession.config_key]['traffic_duration'] = args.traffic_duration
    
     # write out config.
     print(json.dumps(config, indent=4, sort_keys=True))
