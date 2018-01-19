@@ -3,19 +3,106 @@ Spirent HOWTO/README
 
 How to create traffic on sprient in discrete steps.
 ---------------------------------------------------
-Create a session and keep track of session state:
-spirent_session.py --command create > spirent.statefile
 
-Use an existing session to generate traffic:
-# update ip addresses and traffic flows as desired.
-vim spirent.statefile
-# run traffic for 15 seconds.
-spirent_session.py --command traffic -s spirent.statefile -t 15
-# run traffic for 25 seconds
-spirent_session.py --command traffic -s spirent.statefile -t 25
-# end sesion
-spirent_session.py --command destroy -s spirent.statefile
-rm spirent.statefile
+Two files are needed for traffic generation: a config file and a state file. The config
+file contains information about what the traffic will look like. The state file is the 
+state of the spirent session across interactions with teh device. You can look at the state
+file (it's JSON), but it should not be edited directly. 
+
+HOWTO make traffic happen.
+1) Load the python environment for the spirent scripts:
+    > /proj/edgect/share/spirent/venv/bin/activate
+
+2) Generate a default configuration:
+    > ./spirent_generate_config.py -s 10.4.1.15 -d 10.7.1.25 > spi.config
+
+3) Create an active sprient session with a new state file:
+    > ./spirent_session.py -s spi.state -c spi.config create
+
+    This will create a session on the spirent device and create
+    the "spi.state" file which tracks the session.
+
+4) Start traffic based on your configuration file:
+    > ./spirent_session.py -s spi.state -c spi.config traffic_start
+
+5) do stuff that wants active traffic.
+
+6) Stop traffic:
+    > ./spirent_session.py -s spi.state -c spi.config traffic_stop
+
+7) Destroy the Spirent session and clean things up:
+    > ./spirent_session.py -s spi.state -c spi.config destroy
+
+Notes:
+spirent_session.py can take multiple commands and will run them in the order given. So 
+giving it "create traffic_start" will combine steps 3 and 4 into 1. The same for 
+"traffic_stop destroy". 
+
+Traffic can be started and stopped as neeeded while the session 
+remains active. While the session is active, others will not be able to reserve the ports
+your session has attached to.
+
+Usage strings:
+--------------
+usage: spirent_generate_config.py [-h] -s SRCADDR -d DSTADDR
+                                  [-t TRAFFIC_DURATION] [-p PROTOCOL]
+
+Create a configuration for use in other Edgelab Spirent scripts. Writes to
+stdout.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -s SRCADDR, --srcaddr SRCADDR
+                        Source address for traffic.
+  -d DSTADDR, --dstaddr DSTADDR
+                        Destination address for traffic.
+  -t TRAFFIC_DURATION, --traffic_duration TRAFFIC_DURATION
+                        How long in seconds to generate traffic.
+  -p PROTOCOL, --protocol PROTOCOL
+                        IP protocol to use for traffic. Default is UDP (17).
+
+--------------
+usage: spirent_session.py [-h] [-l {all,debug,info,error,critical}]
+                          [--debugREST] -s STATEFILE -c CONFIGFILE
+                          {create,traffic_start,traffic_stop,destroy}
+                          [{create,traffic_start,traffic_stop,destroy} ...]
+
+Connect to Spirent device and start a new session and reserve ports or connect
+to an existing session. Read or write session information to the statefile
+given.
+
+positional arguments:
+  {create,traffic_start,traffic_stop,destroy}
+                        The command(s) to run using the given session/state.
+                        May be given multiple times. Arguments will be
+                        processed in order.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -l {all,debug,info,error,critical}, --loglevel {all,debug,info,error,critical}
+  --debugREST           If given, dump a lot of information about the HTTP/URL
+                        calls being made by the REST API.
+  -s STATEFILE, --statefile STATEFILE
+                        The spirent state file. If it does not exist, it will
+                        be created. The same state file should be passed to
+                        all invocations of this script for a given spirent
+                        session.
+  -c CONFIGFILE, --configfile CONFIGFILE
+                        The configuration to use in this session. Defaults
+                        will be used to fill in any gaps in the configuration.
+--------------
+
+
+Other Scripts:
+--------------
+spirent_clear_sessions.py will clear and cleanup all existing sessions on the
+edgect allocated slot on teh Spirent device. It takes no arguments.
+
+spirent_system_info.py will dump useful and not-useful information about the 
+Spirent device, including any active sessions.
+
+
+OLDER BELOW. Still valid, but not used.
 
 gen_traffic.py
 ==============
