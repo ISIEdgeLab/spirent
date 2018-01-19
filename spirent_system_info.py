@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=args.loglevel.upper())
     config = StcConfig()
-    with StcSession(config) as ss:
+    with StcSession(config, state=None, keep_open=False) as ss:
         data = ss.stc.system_info()
         print('System Info: {}'.format(json.dumps(data, indent=4, sort_keys=True)))
         data = ss.stc.server_info()

@@ -20,7 +20,7 @@ def stc_connected(function):
             raise StcSessionException('session does not exist.')
         elif not self._stc.started():
             raise StcSessionException('Session exists, but is not started.')
-        elif not self._project_handle:
+        elif 'project_handle' not in self._state:
             raise StcSessionException('No project associated with session.')
         # GTL - check here for chassis connection? If we do, it does another REST API
         # call which may not be worth it.
@@ -43,24 +43,20 @@ class StcSession:   # py3.x inherits from object by default
     }
     config_key = 'stc_session'
 
-    def __init__(self, config, user=None, sid=None, verbose=False):
+    def __init__(self, config, state=None, user=None, verbose=False, keep_open=True):
+
         self._config = config.data[StcSession.config_key]
         self._stc_config = config
-        self._user = getuser() if not user else user
-        self._sid = None    # The session id according to Spirent, which is a 
-                            # string of the format "sessname - userid"
+        self._state = state if state else self._config  # seed state with initial config settings.
+        self._state['user'] = getuser() if not user else user
+        if 'sid' not in self._state:
+            self._state['sid'] = None
+                                
         self._verbose = verbose
-        if sid:
-            self._session_id = sid
-        else:
-            self._session_id = ''.join([choice(lowercase) for i in range(10)])
 
         self._stc = None
-        self._project_handle = None
-        self._ports = {}
         self._objects = {}   # dict of handle to data. i.e. {'streamblock1': {sb data/config}, ...}
-
-        self._keep_open = False
+        self._state['keep_open'] = keep_open
 
     #
     # Context manager.
@@ -84,7 +80,10 @@ class StcSession:   # py3.x inherits from object by default
 
     @property
     def project_handle(self):
-        return self._project_handle
+        if 'project_handle' not in self._state:
+            return None
+
+        return self._state['project_handle']
 
     #
     # Non context manager API. Connect to the chassis and stc REST API. If existing = False, 
@@ -96,30 +95,28 @@ class StcSession:   # py3.x inherits from object by default
         log.info('Connecting to: {}:{}'.format(addr, port))
         self._stc = stchttp.StcHttp(addr, port=port, debug_print=self._verbose)
 
-        if 'spi_sid' in self._config:
-            log.info('Joining existing session {}'.format(self._config['spi_sid']))
-            self._stc.join_session(self._config['spi_sid'])
-            self._sid = self._config['spi_sid']
+        if self._state['sid']:
+            log.info('Joining existing session {}'.format(self._state['sid']))
+            self._stc.join_session(self._state['sid'])
         else:
-            log.info('Creating new session, "{}" for user {}.'.format(self._session_id, self._user))
-            self._sid = self._stc.new_session(self._user, self._session_id)
+            sid = ''.join([choice(lowercase) for i in range(10)])
+            log.info('Creating new session, "{}" for user {}.'.format(sid, self._state['user']))
+            self._state['sid'] = self._stc.new_session(self._state['user'], sid)
 
         self._stc.apply()
 
-        chas_addr = self._config['chassis_addr']
+        chas_addr = self._state['chassis_addr']
         log.info('Connecting to chassis at {}'.format(chas_addr))
         # stc.connect wants a list of addresses for some reason.
         self._stc.connect([chas_addr])
         log.info('Connected.')
 
         # If not configured with an existing project, create a new one.
-        if 'project_handle' not in self._config:
+        if not self.project_handle:
             log.info('creating new project.')
             data = self._stc.createx('project')
             log.info('created project: {}'.format(json.dumps(data, indent=4, sort_keys=True)))
-            self._project_handle = data['handle']
-        else:
-            self._project_handle = self._config['project_handle']
+            self._state['project_handle'] = data['handle']
 
     @property
     def stc(self):
@@ -131,33 +128,22 @@ class StcSession:   # py3.x inherits from object by default
 
     @stc_connected
     def disconnect(self):
-        if self._keep_open:
+        if self._state['keep_open']:
             log.info('Keeping session open...')
             return 
 
-        if self._ports:
-            ports = ' '.join(self._ports.keys())
-            log.info('Detaching from ports: {}'.format(ports))
-            self._stc.perform('DetachPorts', portlist=ports)
+        if 'ports' in self._state and self._state['ports']:
+            self.detach_ports()
 
-        log.info('Deleting {} created objects.'.format(len(self._objects)))
-        for h in self._objects.keys():
-            log.info('Deleting object {}.'.format(h))
-            # GTL - no idea why some things that we create() are not found on delete(). Ugh.
-            try:
-                self._stc.delete(h) 
-            # except RestHttpError as e:   stc rest should raise a locally importable symbol. GTL FIX.
-            except Exception as e:
-                log.warning('Error deleting stc object: {}'.format(e))
-
-        log.info('Deleting project {}.'.format(self._project_handle))
-        self._stc.delete(self._project_handle)
+        log.info('Deleting project {}.'.format(self.project_handle))
+        self._stc.delete(self.project_handle)
+        del self._state['project_handle']
 
         log.info('Ending session.')
         self._stc.end_session(end_tcsession=True)
 
-    def keep_open(self):
-        self._keep_open = True
+    def keep_open(self, val=True):
+        self._state['keep_open'] = val
 
     @stc_connected
     def reserve_ports(self):
@@ -166,64 +152,76 @@ class StcSession:   # py3.x inherits from object by default
         # oh so dangerous:
         sport = self._stc_config.data[StcIPv4.config_key]['sourceAddr'].split('.')[1]
         dport = self._stc_config.data[StcIPv4.config_key]['destAddr'].split('.')[1]
-        new_ports = []
+        port_handles = []
         for p in [sport, dport]:
             # create a port and set the location. 
-            location = '//{}/{}/{}'.format(self._config['chassis_addr'], self._config['slot'], p)
-            h = self._stc.create('port', under=self._project_handle, location=location)
-            new_ports.append(h)
-            self._ports[h] = self._stc.get(h)
+            location = '//{}/{}/{}'.format(self._state['chassis_addr'], self._state['slot'], p)
+            h = self._stc.create('port', under=self.project_handle, location=location)
+            port_handles.append(h)
             log.info('Created port "{}"'.format(h))
-            log.debug('Port Data Pre-Attach: {}'.format(json.dumps(self._ports[h], indent=4, sort_keys=True)))
+            log.debug('Port Data Pre-Attach: {}'.format(json.dumps(self._stc.get(h), indent=4, sort_keys=True)))
 
-        self._stc.perform('AttachPorts', portList=' '.join(new_ports))
-        for h in new_ports:
-            self._ports[h] = self._stc.get(h)
-            log.debug('Port Data Post-Attach: {}'.format(json.dumps(self._ports[h], indent=4, sort_keys=True)))
+        log.info('Attaching to ports {}'.format(' '.join(port_handles)))
+        self._stc.perform('AttachPorts', portList=' '.join(port_handles))
 
-        return new_ports
+        for h in port_handles:
+            log.debug('Port Data Post-Attach: {}'.format(json.dumps(self._stc.get(h), indent=4, sort_keys=True)))
+
+        if 'ports' not in self._state:
+            self._state['ports'] = []
+
+        self._state['ports'] += port_handles
+
+        return port_handles
     
     @stc_connected
     def create_obj(self, obj, under, *args, **kwargs):
         h = self._stc.create(obj, under, *args, **kwargs)
         data = self._stc.get(h)
-        self._objects[h] = data
+        if 'obj_handles' not in self._state:
+            self._state['obj_handles'] = []
+        
+        self._state['obj_handles'].append(h)
         log.debug('created {}:\n{}'.format(h, json.dumps(data, indent=4, sort_keys=True)))
+
         return h
 
     @stc_connected
     def create_streamblock(self, port):
         kwargs = self._stc_config.data[StcStreamblock.config_key]
         handle = self.create_obj('streamBlock', port, **kwargs)
-        self._config['streamblock_handle'] = handle
-        self._config['streamblock_port'] = port
+        self._state['streamblock_handle'] = handle
+        self._state['streamblock_port'] = port
         return StcStreamblock(handle, port, self)
 
     @stc_connected
     def destroy_streamblock(self):
-        handle = self._config['streamblock_handle'] if 'streamblock_handle' in self._config else None
-        port = self._config['streamblock_port'] if 'streamblock_port' in self._config else None
+        '''Destroy an existing streamblock. If active, the traffic in the streamblock will be stopped before destruction.'''
+        handle = self._state['streamblock_handle'] if 'streamblock_handle' in self._config else None
+        port = self._state['streamblock_port'] if 'streamblock_port' in self._config else None
         if handle and port:
             sb = StcStreamblock(handle, port, self)
             sb.stop_traffic()
             log.info('Deleting object {}/{}.'.format(handle, port))
             self._stc.delete(handle)
-            if handle in self._objects:
-                del self._objects[sb._handle]
-
             del self._config['streamblock_handle']
             del self._config['streamblock_port']
 
     @stc_connected
     def detach_ports(self):
-        if not self._ports:
+        if 'ports' not in self._state or not self._state['ports']:
             log.info('Attempt to detech from ports when we are not attached to any. Ignoring.')
             return
 
-        ports = ' '.join(self._ports.keys())
+        ports = ' '.join(self._state['ports'])
         log.info('Detaching from ports: {}'.format(ports))
         self._stc.perform('DetachPorts', portlist=ports)
-        self._ports = None
+
+        for port in self._state['ports']:
+            log.info('Deleting port {}'.format(port))
+            self._stc.delete(port)
+
+        del self._state['ports']
 
     @stc_connected
     def perform(self, command, params=None, **kwargs):
@@ -233,13 +231,7 @@ class StcSession:   # py3.x inherits from object by default
         return data
 
     def save_and_write_session(self, filehandle):
-        '''Store session internals (if they exist) and write the current state/config to the file handle given.'''
-        self._config['verbose'] = self._verbose
-        self._config['user'] = self._user
-        self._config['spi_sid'] = self._sid
-        self._config['session_id'] = self._session_id
-        self._config['project_handle'] = self._project_handle
-        json.dump(self._stc_config.data, filehandle, indent=4, sort_keys=True)
+        json.dump(self._state, filehandle, indent=4, sort_keys=True)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

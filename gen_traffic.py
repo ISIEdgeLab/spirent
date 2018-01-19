@@ -3,6 +3,7 @@
 import logging
 import json
 import argparse 
+from time import sleep
 
 from stc_session import StcSession
 from stc_streamblock import StcStreamblock, StcStreamblockException
@@ -48,13 +49,15 @@ if __name__ == '__main__':
             config.apply_config(custom_config)
 
     try:
-        with StcSession(config=config) as sess:
+        with StcSession(config=config, keep_open=False) as sess:
             ports = sess.reserve_ports()
             try:
                 sb = sess.create_streamblock(port=ports[0])
                 sb.create_ethernetII()
                 sb.create_ipv4()
-                sb.generate_traffic(seconds=args.howlong)
+                sb.start_traffic()
+                sleep(args.howlong)
+                sb.stop_traffic()
             except StcStreamblockException as e:
                 log.error('Error running traffic stream: {}'.format(e))
                 exit(1)  
